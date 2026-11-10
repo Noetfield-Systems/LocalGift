@@ -1,5 +1,6 @@
 import { createHmac, createHash, timingSafeEqual, randomBytes, randomUUID } from "node:crypto";
 import { ensureCommerceSchema } from "../db/commercial";
+import { ensureDealsSchema } from "../db/deals";
 type Sql = any;
 const TYPES = new Set(["discover_opened","partner_clicked","preview_shared","quest_opened","referral_opened","corporate_opened"]);
 const pending = new Map<string,{time:number,count:number}>();
@@ -68,7 +69,8 @@ export async function routeCommercial(req:Request,sql:Sql|null):Promise<Response
  if(req.method==="GET"&&path==="/api/admin/commercial/queue"){if(!adminOK(req))return response({error:"Unauthorized"},401);const [orders,corporate,tasks,requests]=await Promise.all([sql.unsafe("SELECT id,business,contact,email,status,amount_cents,created_at,paid_at FROM localgift_service_orders ORDER BY created_at DESC LIMIT 100"),sql.unsafe("SELECT id,company,contact,email,recipients,budget_cad,occasion,status,created_at FROM localgift_corporate_inquiries ORDER BY created_at DESC LIMIT 100"),sql.unsafe("SELECT t.id,t.order_id,t.kind,t.state,t.created_at,o.business,o.contact,o.email FROM localgift_fulfillment_tasks t JOIN localgift_service_orders o ON o.id=t.order_id WHERE t.state=\x27open\x27 ORDER BY t.created_at DESC LIMIT 100"),sql.unsafe("SELECT r.id,r.kind,r.details,r.status,r.created_at,a.business FROM localgift_merchant_requests r JOIN localgift_merchant_accounts a ON a.id=r.account_id ORDER BY r.created_at DESC LIMIT 100")]);return response({orders,corporate_inquiries:corporate,fulfillment_tasks:tasks,merchant_requests:requests});}
  if(req.method==="GET"&&(path==="/api/admin/commercial"||path==="/api/ops/summary")){
   if(!adminOK(req))return response({error:"Unauthorized"},401);
-  const [orders,corporate,previews,events,merchants,fulfill,interest,applications]=await Promise.all([
+  await ensureDealsSchema(sql);
+  const [orders,corporate,previews,events,merchants,fulfill,interest,applications,dealPipeline]=await Promise.all([
    sql.unsafe("SELECT status,COUNT(*)::INT n,COALESCE(SUM(CASE WHEN status='paid' THEN amount_cents ELSE 0 END),0)::BIGINT gross_cents FROM localgift_service_orders GROUP BY status"),
    sql.unsafe("SELECT COUNT(*)::INT n FROM localgift_corporate_inquiries"),
    sql.unsafe("SELECT COUNT(*)::INT n FROM localgift_gift_previews"),
@@ -76,9 +78,10 @@ export async function routeCommercial(req:Request,sql:Sql|null):Promise<Response
    sql.unsafe("SELECT COUNT(*)::INT n FROM localgift_partners WHERE is_active=TRUE"),
    sql.unsafe("SELECT COUNT(*)::INT n FROM localgift_fulfillment_tasks WHERE state='open'"),
    sql.unsafe("SELECT COUNT(*)::INT n FROM localgift_interest"),
-   sql.unsafe("SELECT COUNT(*)::INT n FROM localgift_merchant_leads")
+   sql.unsafe("SELECT COUNT(*)::INT n FROM localgift_merchant_leads"),
+   sql.unsafe("SELECT status,COUNT(*)::INT n FROM localgift_merchant_deal_proposals GROUP BY status")
   ]);
-  return response({product_id:"localgift",merchant_applications:applications[0].n,active_verified_merchants:merchants[0].n,consumer_launch_interest:interest[0].n,gift_previews:previews[0].n,corporate_inquiries:corporate[0].n,service_orders:orders,product_events:events,open_fulfillment_tasks:fulfill[0].n,gross_confirmed_service_collections_cents:orders.reduce((a:number,x:any)=>a+Number(x.gross_cents||0),0),net_collected_revenue_cents:null,currency:"CAD",source:"database",next_action:"Contact qualified merchant applicants and fulfill paid setup orders"});
+  return response({product_id:"localgift",merchant_applications:applications[0].n,active_verified_merchants:merchants[0].n,consumer_launch_interest:interest[0].n,gift_previews:previews[0].n,corporate_inquiries:corporate[0].n,service_orders:orders,product_events:events,open_fulfillment_tasks:fulfill[0].n,gross_confirmed_service_collections_cents:orders.reduce((a:number,x:any)=>a+Number(x.gross_cents||0),0),net_collected_revenue_cents:null,merchant_deal_pipeline:dealPipeline,merchant_deal_revenue_verified:false,merchant_deal_rewards_funded:false,currency:"CAD",source:"database",next_action:dealPipeline.some((row:any)=>row.status==="new"||row.status==="negotiating")?"Negotiate documented issuer-funded deal terms; keep cashback disabled until eligible settled revenue":"Acquire first merchant agreement and close a confirmed paid setup order"});
  }
  if(req.method==="GET"&&path==="/api/merchant/me"){const a=await account(req,sql);return a?response({merchant:a}):response({error:"Unauthorized"},401);}
  if(req.method==="GET"&&path==="/api/merchant/requests"){const a=await account(req,sql);if(!a)return response({error:"Unauthorized"},401);const rows=await sql.unsafe("SELECT id,kind,details,status,created_at FROM localgift_merchant_requests WHERE account_id=$1 ORDER BY created_at DESC LIMIT 30",[a.id]);return response({requests:rows});}
