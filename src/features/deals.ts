@@ -23,7 +23,7 @@ async function readJson(req:Request){
  if(!(req.headers.get("content-type")||"").startsWith("application/json"))throw new SyntaxError("JSON_REQUIRED");
  if(Number(req.headers.get("content-length")||"0")>10000)throw new RangeError("TOO_LARGE");
  const text=await req.text();if(text.length>10000)throw new RangeError("TOO_LARGE");
- return JSON.parse(text||"{}");
+ const parsed=JSON.parse(text||"{}");if(!parsed||typeof parsed!=="object"||Array.isArray(parsed))throw new SyntaxError("JSON_OBJECT_REQUIRED");return parsed;
 }
 function dealInput(obj:any):DealInput{
  return {

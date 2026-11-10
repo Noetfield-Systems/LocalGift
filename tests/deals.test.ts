@@ -39,3 +39,29 @@ test("economics API calculates server-side without a paid order",async()=>{
  expect(r?.status).toBe(200);
  expect((await r?.json()).scenario.projected_contribution_cents).toBe(380);
 });
+
+test("merchant proposal is captured with server-calculated economics, not a fictitious sale",async()=>{
+ const calls:Array<{statement:string,args:any[]}>=[],sql={unsafe:async(statement:string,args:any[]=[])=>{calls.push({statement,args});return [];}};
+ const proposal={
+  model:"merchant_commission",face_cents:10000,merchant_rate_bps:1200,
+  consumer_discount_bps:0,cashback_bps:400,referral_bps:100,processing_bps:270,reserve_bps:50,
+  business:"Actual merchant example",contact:"Owner",email:"owner@example.ca",category:"Food & dining",
+  checkout_url:"https://merchant.example.ca/gift",consent:true
+ };
+ const res=await routeDeals(new Request("http://localhost/api/deals/proposals",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(proposal)}),sql);
+ expect(res?.status).toBe(201);
+ const data=await res?.json();
+ expect(data.status).toBe("new");expect(data.scenario.projected_contribution_cents).toBe(380);
+ expect(data.scenario.cash_revenue_verified).toBe(false);
+ const insert=calls.find(x=>x.statement.startsWith("INSERT INTO localgift_merchant_deal_proposals"));
+ expect(insert).toBeDefined();
+ expect(insert!.args).toContain(380);
+ expect(calls.filter(x=>x.statement.startsWith("CREATE TABLE")).length).toBeGreaterThanOrEqual(4);
+});
+test("seller intake rejects non-consenting, incomplete and cross-origin proposals",async()=>{
+ const sql={unsafe:async()=>[]};
+ const bad=await routeDeals(new Request("http://localhost/api/deals/proposals",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({email:"x@y.ca"})}),sql);
+ expect(bad?.status).toBe(400);
+ const cross=await routeDeals(new Request("http://localhost/api/deals/economics",{method:"POST",headers:{"origin":"https://evil.example","content-type":"application/json"},body:"{}"}),null);
+ expect(cross?.status).toBe(403);
+});
