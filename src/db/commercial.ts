@@ -1,3 +1,4 @@
+import { ensureBaselineSchema } from "./baseline";
 export const COMMERCE_DDL = [
 "CREATE TABLE IF NOT EXISTS localgift_service_orders(id UUID PRIMARY KEY, business TEXT NOT NULL, contact TEXT NOT NULL, email TEXT NOT NULL, package TEXT NOT NULL CHECK(package IN ('starter')), amount_cents INTEGER NOT NULL CHECK(amount_cents=14900), currency TEXT NOT NULL DEFAULT 'cad', status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','checkout_created','paid','cancelled','refunded','payment_unavailable')), stripe_session_id TEXT UNIQUE, stripe_payment_intent TEXT, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), paid_at TIMESTAMPTZ)",
 "CREATE TABLE IF NOT EXISTS localgift_fulfillment_tasks(id UUID PRIMARY KEY, order_id UUID NOT NULL UNIQUE REFERENCES localgift_service_orders(id), kind TEXT NOT NULL, state TEXT NOT NULL DEFAULT 'open', created_at TIMESTAMPTZ NOT NULL DEFAULT NOW())",
@@ -10,6 +11,6 @@ export const COMMERCE_DDL = [
 ];
 let ready: Promise<void> | undefined;
 export async function ensureCommerceSchema(sql:any) {
-  if(!ready) ready=(async()=>{for(const ddl of COMMERCE_DDL)await sql.unsafe(ddl);})();
+  if(!ready) ready=(async()=>{await ensureBaselineSchema(sql);for(const ddl of COMMERCE_DDL)await sql.unsafe(ddl);})();
   try{await ready;}catch(err){ready=undefined;throw err;}
 }
