@@ -1,0 +1,14 @@
+{
+  "name": "localgift",
+  "version": "0.2.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "bun src/server.ts",
+    "dev": "bun --watch src/server.ts",
+    "test": "bun test"
+  },
+  "dependencies": {
+    "postgres": "^3.4.7"
+  }
+}
