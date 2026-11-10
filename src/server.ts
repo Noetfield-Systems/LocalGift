@@ -35,7 +35,7 @@ Bun.serve({port:PORT,hostname:"0.0.0.0",async fetch(req){
  if(req.method==="GET"&&path==="/api/admin/leads"){
  const auth=safe(req.headers.get("authorization")||"",256).replace(/^Bearer /i,"");
  if(!equal(auth,Bun.env.LOCALGIFT_ADMIN_TOKEN||""))return json({error:"Unauthorized"},401);
- await db();const merchants=await sql.unsafe("SELECT business,contact,email,website,platform,city,created_at FROM localgift_merchant_leads ORDER BY created_at DESC LIMIT 100");
+ await db();const merchants=await sql.unsafe("SELECT id,business,contact,email,website,platform,city,created_at FROM localgift_merchant_leads ORDER BY created_at DESC LIMIT 100");
  return json({merchants});
  }
  if(req.method==="GET"&&path==="/api/admin/partners"){
