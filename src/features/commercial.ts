@@ -5,7 +5,7 @@ const TYPES = new Set(["discover_opened","partner_clicked","preview_shared","que
 const pending = new Map<string,{time:number,count:number}>();
 function response(body:any,status=200){return new Response(JSON.stringify(body),{status,headers:{"content-type":"application/json; charset=utf-8","cache-control":"no-store","x-content-type-options":"nosniff"}});}
 function clean(v:any,max=160){return String(v??"").trim().slice(0,max);}
-function email(v:any){const s=clean(v,254).toLowerCase();return /^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(s)?s:null;}
+export function email(v:any){const s=clean(v,254).toLowerCase();return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s)?s:null;}
 function originOK(req:Request){const o=req.headers.get("origin");if(!o)return true;try{return new URL(o).host===new URL(req.url).host;}catch{return false;}}
 function adminOK(req:Request){const token=clean((req.headers.get("authorization")||"").replace(/^Bearer /i,""),512);const secret=Bun.env.LOCALGIFT_ADMIN_TOKEN||"";return token.length>=32&&token.length===secret.length&&timingSafeEqual(Buffer.from(token),Buffer.from(secret));}
 function throttle(req:Request){const ip=clean((req.headers.get("x-forwarded-for")||"anonymous").split(",")[0],100),now=Date.now();let item=pending.get(ip);if(pending.size>5000)pending.clear();if(!item||now-item.time>600000){item={time:now,count:0};pending.set(ip,item);}return ++item.count<=35;}
@@ -34,18 +34,20 @@ export async function routeCommercial(req:Request,sql:Sql|null):Promise<Response
  try{
  await ensureCommerceSchema(sql);
  if(req.method==="GET"&&path==="/api/commercial/catalog"){const rows=await sql.unsafe("SELECT name,category,description,issuer,checkout_url FROM localgift_partners WHERE is_active=TRUE ORDER BY created_at DESC LIMIT 100");return response({partners:rows});}
+ if(req.method==="GET"&&path==="/api/admin/commercial/queue"){if(!adminOK(req))return response({error:"Unauthorized"},401);const [orders,corporate,tasks,requests]=await Promise.all([sql.unsafe("SELECT id,business,contact,email,status,amount_cents,created_at,paid_at FROM localgift_service_orders ORDER BY created_at DESC LIMIT 100"),sql.unsafe("SELECT id,company,contact,email,recipients,budget_cad,occasion,status,created_at FROM localgift_corporate_inquiries ORDER BY created_at DESC LIMIT 100"),sql.unsafe("SELECT t.id,t.order_id,t.kind,t.state,t.created_at,o.business,o.contact,o.email FROM localgift_fulfillment_tasks t JOIN localgift_service_orders o ON o.id=t.order_id WHERE t.state=\x27open\x27 ORDER BY t.created_at DESC LIMIT 100"),sql.unsafe("SELECT r.id,r.kind,r.details,r.status,r.created_at,a.business FROM localgift_merchant_requests r JOIN localgift_merchant_accounts a ON a.id=r.account_id ORDER BY r.created_at DESC LIMIT 100")]);return response({orders,corporate_inquiries:corporate,fulfillment_tasks:tasks,merchant_requests:requests});}
  if(req.method==="GET"&&(path==="/api/admin/commercial"||path==="/api/ops/summary")){
   if(!adminOK(req))return response({error:"Unauthorized"},401);
-  const [orders,corporate,previews,events,merchants,fulfill,interest]=await Promise.all([
+  const [orders,corporate,previews,events,merchants,fulfill,interest,applications]=await Promise.all([
    sql.unsafe("SELECT status,COUNT(*)::INT n,COALESCE(SUM(CASE WHEN status='paid' THEN amount_cents ELSE 0 END),0)::BIGINT gross_cents FROM localgift_service_orders GROUP BY status"),
    sql.unsafe("SELECT COUNT(*)::INT n FROM localgift_corporate_inquiries"),
    sql.unsafe("SELECT COUNT(*)::INT n FROM localgift_gift_previews"),
    sql.unsafe("SELECT type,COUNT(*)::INT n FROM localgift_product_events GROUP BY type"),
    sql.unsafe("SELECT COUNT(*)::INT n FROM localgift_partners WHERE is_active=TRUE"),
    sql.unsafe("SELECT COUNT(*)::INT n FROM localgift_fulfillment_tasks WHERE state='open'"),
-   sql.unsafe("SELECT COUNT(*)::INT n FROM localgift_interest")
+   sql.unsafe("SELECT COUNT(*)::INT n FROM localgift_interest"),
+   sql.unsafe("SELECT COUNT(*)::INT n FROM localgift_merchant_leads")
   ]);
-  return response({product_id:"localgift",merchant_applications:undefined,active_verified_merchants:merchants[0].n,consumer_launch_interest:interest[0].n,gift_previews:previews[0].n,corporate_inquiries:corporate[0].n,service_orders:orders,product_events:events,open_fulfillment_tasks:fulfill[0].n,gross_confirmed_service_collections_cents:orders.reduce((a:number,x:any)=>a+Number(x.gross_cents||0),0),net_collected_revenue_cents:null,currency:"CAD",source:"database",next_action:"Contact qualified merchant applicants and fulfill paid setup orders"});
+  return response({product_id:"localgift",merchant_applications:applications[0].n,active_verified_merchants:merchants[0].n,consumer_launch_interest:interest[0].n,gift_previews:previews[0].n,corporate_inquiries:corporate[0].n,service_orders:orders,product_events:events,open_fulfillment_tasks:fulfill[0].n,gross_confirmed_service_collections_cents:orders.reduce((a:number,x:any)=>a+Number(x.gross_cents||0),0),net_collected_revenue_cents:null,currency:"CAD",source:"database",next_action:"Contact qualified merchant applicants and fulfill paid setup orders"});
  }
  if(req.method==="GET"&&path==="/api/merchant/me"){const a=await account(req,sql);return a?response({merchant:a}):response({error:"Unauthorized"},401);}
  if(req.method==="GET"&&path==="/api/merchant/requests"){const a=await account(req,sql);if(!a)return response({error:"Unauthorized"},401);const rows=await sql.unsafe("SELECT id,kind,details,status,created_at FROM localgift_merchant_requests WHERE account_id=$1 ORDER BY created_at DESC LIMIT 30",[a.id]);return response({requests:rows});}
