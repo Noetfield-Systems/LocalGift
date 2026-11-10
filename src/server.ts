@@ -1,3 +1,4 @@
+import { routeDeals } from "./features/deals";
 import { routeCommercial } from "./features/commercial";
 import { ensureBaselineSchema } from "./db/baseline";
 const PAGE = await Bun.file(new URL("./pages/home.html", import.meta.url)).text();
@@ -23,13 +24,14 @@ const PORT=Number(Bun.env.PORT||3000);
 Bun.serve({port:PORT,hostname:"0.0.0.0",async fetch(req){
  const path=new URL(req.url).pathname;
  try{
+ const deals=await routeDeals(req,sql);if(deals)return deals;
  const commercial=await routeCommercial(req,sql);if(commercial)return commercial;
  if(req.method==="GET"&&path==="/")return new Response(PAGE,{headers:{"content-type":"text/html; charset=utf-8","cache-control":"public, max-age=300","x-content-type-options":"nosniff","x-frame-options":"DENY","referrer-policy":"strict-origin-when-cross-origin"}});
  if(req.method==="GET"&&path==="/admin")return new Response(ADMINPAGE,{headers:{"content-type":"text/html; charset=utf-8","cache-control":"no-store","x-robots-tag":"noindex,nofollow"}});
  if(req.method==="GET"&&path==="/privacy")return new Response(PRIVACY,{headers:{"content-type":"text/html; charset=utf-8"}});
  if(req.method==="GET"&&path==="/terms")return new Response(TERMS,{headers:{"content-type":"text/html; charset=utf-8"}});
  if(req.method==="GET"&&path==="/robots.txt")return new Response("User-agent: *\nAllow: /\nDisallow: /api/\nDisallow: /admin\nSitemap: https://localgift-web-production.up.railway.app/sitemap.xml",{headers:{"content-type":"text/plain; charset=utf-8"}});
- if(req.method==="GET"&&path==="/sitemap.xml"){const host="https://localgift-web-production.up.railway.app";const paths=["/","/discover","/create","/for-merchants","/corporate","/quests","/privacy","/terms"];const xml='<?xml version="1.0"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'+paths.map(p=>"<url><loc>"+host+p+"</loc></url>").join("")+"</urlset>";return new Response(xml,{headers:{"content-type":"application/xml; charset=utf-8","cache-control":"public, max-age=1800"}});}
+ if(req.method==="GET"&&path==="/sitemap.xml"){const host="https://localgift-web-production.up.railway.app";const paths=["/","/discover","/create","/for-merchants","/corporate","/quests","/merchant-deals","/privacy","/terms"];const xml='<?xml version="1.0"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'+paths.map(p=>"<url><loc>"+host+p+"</loc></url>").join("")+"</urlset>";return new Response(xml,{headers:{"content-type":"application/xml; charset=utf-8","cache-control":"public, max-age=1800"}});}
  if(req.method==="GET"&&path==="/health"){await db();await sql.unsafe("SELECT 1");return json({ok:true,project:"localgift-vancouver",database:"connected",gift_cards_issued:0,card_sales_enabled:false});}
  if(req.method==="GET"&&path==="/api/partners"){await db();const rows=await sql.unsafe("SELECT name,category,description,issuer,checkout_url FROM localgift_partners WHERE is_active=TRUE ORDER BY created_at DESC LIMIT 100");return json({partners:rows});}
  if(req.method==="GET"&&path==="/api/admin/leads"){
@@ -89,7 +91,7 @@ Bun.serve({port:PORT,hostname:"0.0.0.0",async fetch(req){
 
 
 setTimeout(async()=>{
- const paths=["/","/health","/api/partners","/api/commercial/catalog","/create","/discover","/for-merchants","/corporate","/quests","/merchant/portal","/assets/commercial.css"];
+ const paths=["/","/health","/api/partners","/api/commercial/catalog","/merchant-deals","/create","/discover","/for-merchants","/corporate","/quests","/merchant/portal","/assets/commercial.css"];
  const checks=[];
  for(const path of paths){
    try {const r=await fetch("http://127.0.0.1:"+PORT+path,{signal:AbortSignal.timeout(6000)});checks.push({path,status:r.status});}

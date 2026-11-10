@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#102722">
+<title>Merchant Deal Studio — LocalGift Vancouver</title>
+<meta name="description" content="Propose a real merchant-funded gift card offer, calculate its projected contribution margin, and grow local shopping without issuing unfunded credits.">
+<meta property="og:title" content="LocalGift Merchant Deal Studio"><meta property="og:type" content="website">
+<meta property="og:description" content="Merchant-funded local gift deals and a transparent unit economics calculator.">
+<link rel="canonical" href="https://localgift-web-production.up.railway.app/merchant-deals">
+<link rel="stylesheet" href="/assets/commercial.css">
+<style>
+.deal-stage{display:grid;grid-template-columns:minmax(0,1.05fr) minmax(0,.95fr);gap:24px;align-items:start}
+.deal-model{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:18px 0 22px}
+.choice{display:block;cursor:pointer;padding:15px 14px;border:1px solid #c7d7c7;border-radius:14px;font-weight:800}
+.choice span{font-size:11px;font-weight:500;color:#587264;display:block;margin-top:4px}
+.choice:has(input:checked){border-color:#183e33;background:#eaf5df;box-shadow:inset 0 0 0 1px #183e33}
+.choice input{width:auto;margin-right:7px}
+.numbers{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+.numbers label{font-size:12px}
+.stack{border:1px solid #dce4d6;padding:12px 0;border-top:0}
+.stack:first-of-type{border-top:1px solid #dce4d6;border-radius:12px 12px 0 0}
+.stack:last-of-type{border-radius:0 0 12px 12px}
+.stackrow{display:flex;gap:12px;align-items:center;justify-content:space-between;padding:0 15px;font-size:13px}
+.stackrow b{font-variant-numeric:tabular-nums}
+.total{display:flex;align-items:baseline;justify-content:space-between;gap:10px;padding:23px;background:#d8edc7;border-radius:15px;margin-top:20px}
+.total strong{font-size:34px;font-variant-numeric:tabular-nums;letter-spacing:-.045em}
+.total.loss{background:#ffe2d9}
+.total .muted{font-size:12px}
+.aside{background:#102722;color:#fff;border-radius:24px;padding:28px;margin-top:18px}
+.aside .muted{color:#cee2d5}
+.footnote-deals{font-size:12px;color:#516d5b;line-height:1.8}
+@media(max-width:780px){.deal-stage{grid-template-columns:1fr}.numbers{grid-template-columns:1fr 1fr}}
+@media(max-width:420px){.numbers,.deal-model{grid-template-columns:1fr}}
+</style></head>
+<body><a href="#main" class="skip">Skip to content</a>
+<div class="navwrap"><nav class="wrap nav" aria-label="Primary">
+<a class="brand" href="/"><span class="flower">✳</span>localgift<span class="period">.</span></a>
+<div class="links"><a href="/discover">Explore</a><a href="/create">Gift studio</a><a href="/for-merchants">For merchants</a><a href="/corporate">Corporate</a><a href="/quests">Club</a></div>
+</nav></div>
+<main id="main">
+<section class="wrap hero"><div><span class="eyebrow">LOCALGIFT • MERCHANT GROWTH</span>
+<h1>More sales.<br>Less wasted<br><em>margin.</em></h1>
+<p class="lead">Build a fundable, merchant-backed gift offer. Set the commercial terms, see what remains after rewards and costs, and propose a real collaboration. No card inventory is purchased or issued by completing this form.</p>
+<div class="actions"><a class="button" href="#builder">Calculate your deal ↗</a><a class="button outline" href="/for-merchants">One-time $149 launch service</a></div>
+<span class="tag">Local-first · Issuer-backed · No required minimum volume</span>
+</div><div class="visual"><div class="art-card"><small>LOCALGIFT · LOCAL COMMERCE</small>
+<b>A better offer.<br>A repeat customer.</b><small>BUY • SAVE • DISCOVER • RETURN</small></div></div></section>
+<section class="section cream"><div class="wrap">
+<div class="eyebrow">PROVEN COMMERCE MECHANICS</div><h2>Two ways to collaborate.</h2>
+<div class="grid"><article class="panel"><span class="stamp">DISTRIBUTION</span><h3>Merchant commission</h3><p>Your business stays the issuer. You propose a marketing/distribution commission and retain responsibility for card issuance and redemption. No platform card is minted.</p></article>
+<article class="panel"><span class="stamp">NEGOTIATED SUPPLY</span><h3>Wholesale resale</h3><p>Specify a potential issuer-approved wholesale discount. This is a proposal only; resale starts only after inventory rights and economics are agreed.</p></article>
+<article class="panel"><span class="stamp">MEASURABLE GROWTH</span><h3>Funded incentives</h3><p>Reserve part of the genuine margin for possible customer savings and transaction-based referrals. No reward is payable from an unconfirmed action.</p></article></div></div></section>
+<section class="wrap section" id="builder"><div class="eyebrow">DEAL STUDIO</div><h2>Know the economics before you launch.</h2>
+<p class="lead">Edit the assumptions. These are simulated numbers in CAD—not a negotiated merchant rate, a checkout, or a balance available to withdraw.</p>
+<div class="deal-stage"><div class="panel"><h3>1. Design the economics</h3>
+<form id="economics" class="form">
+<div class="deal-model"><label class="choice"><input type="radio" name="model" value="merchant_commission" checked> Distribution commission<span>Merchant pays an agreed commission on issuer-backed sales.</span></label>
+<label class="choice"><input type="radio" name="model" value="wholesale_resale"> Wholesale spread<span>Agreed source price versus the sale price to shoppers.</span></label></div>
+<div class="numbers">
+<label>Gift card face value · CAD<input name="face" type="number" inputmode="decimal" min="25" max="10000" step="1" value="100" required></label>
+<label id="merchantRateLabel">Merchant commission · %<input name="merchant_rate" type="number" inputmode="decimal" min="0" max="50" step=".1" value="12" required></label>
+<label>Buyer discount · %<input name="consumer_discount" type="number" min="0" max="50" step=".1" value="0" required></label>
+<label>Customer cashback budget · %<input name="cashback" type="number" min="0" max="30" step=".1" value="4" required></label>
+<label>Qualified referral budget · %<input name="referral" type="number" min="0" max="5" step=".1" value="1" required></label>
+<label>Payment processing assumption · %<input name="processing" type="number" min="0" max="12" step=".1" value="2.7" required></label>
+<label>Chargeback / reversal reserve · %<input name="reserve" type="number" min="0" max="20" step=".1" value=".5" required></label>
+</div></form>
+<p class="notice">Payments, issuer costs, redemption, processing fees and incentives must be confirmed by real agreements and settlement records. This calculator does not create gift cards, rewards or financial accounts.</p></div>
+<div class="panel"><span class="eyebrow">ILLUSTRATIVE MARGIN · PER SALE</span><h3>See where every dollar goes</h3>
+<div class="stack"><div class="stackrow"><span>Consumer pays</span><b id="buyer">$100.00</b></div></div>
+<div class="stack"><div class="stackrow"><span>Issuer receives</span><b id="issuer">$88.00</b></div></div>
+<div class="stack"><div class="stackrow"><span>Merchant-funded spread</span><b id="spread">+$12.00</b></div></div>
+<div class="stack"><div class="stackrow"><span>Customer price discount</span><b id="discount">−$0.00</b></div></div>
+<div class="stack"><div class="stackrow"><span>Cashback budget</span><b id="cashback">−$4.00</b></div></div>
+<div class="stack"><div class="stackrow"><span>Referral budget</span><b id="referral">−$1.00</b></div></div>
+<div class="stack"><div class="stackrow"><span>Processing assumption</span><b id="processing">−$2.70</b></div></div>
+<div class="stack"><div class="stackrow"><span>Risk reserve</span><b id="reserve">−$0.50</b></div></div>
+<div class="total" id="result"><span><b>Projected contribution</b><br><span class="muted">Before fixed costs and taxes</span></span><strong id="contribution">+$3.80</strong></div>
+<p id="evaluation" class="status" role="status" aria-live="polite"></p>
+<div class="aside"><div class="eyebrow">ONE ECONOMIC RULE</div><h3>Pay rewards from earned margin, not promises.</h3><p class="muted">No paid sale, no funded cashback. A referral must produce a qualifying real purchase. Growth budgets must not exceed the contribution they create.</p></div>
+</div></div></section>
+<section class="section cream" id="propose"><div class="wrap split">
+<div><span class="eyebrow">PROPOSE YOUR OFFER</span><h2>Turn an estimate into a conversation.</h2><p class="lead">We review real merchant agreements and official checkout options. Submitting does not make your offer public or establish any obligation to issue or redeem a gift card.</p>
+<p class="footnote-deals">Suitable for Vancouver and Metro Vancouver cafés, restaurants, salons, wellness studios, experience businesses, and local retailers.</p></div>
+<div class="panel"><form id="proposal" class="form"><label>Business name<input name="business" autocomplete="organization" maxlength="120" required placeholder="Your local business"></label>
+<label>Your name<input name="contact" autocomplete="name" maxlength="100" required placeholder="Contact name"></label>
+<label>Work email<input name="email" autocomplete="email" type="email" maxlength="254" required placeholder="you@business.ca"></label>
+<label>Type of local business<select name="category" required>
+<option>Coffee &amp; treats</option><option>Food &amp; dining</option><option>Experiences</option><option>Wellness</option><option>Shopping</option><option>Other local service</option></select></label>
+<label>Official website / issuer checkout (optional)<input name="checkout_url" type="url" maxlength="500" placeholder="https://yourbusiness.ca"></label>
+<input class="sr" name="trap" tabindex="-1" autocomplete="off" aria-hidden="true">
+<label class="check"><input type="checkbox" name="consent" required><span>I consent to being contacted about this commercial proposal. I understand the rates are illustrative and no monetary reward, gift card or sale is created.</span></label>
+<button class="button" id="submit" type="submit">Send proposal for review ↗</button>
+<p class="status" role="status" aria-live="polite" id="formStatus"></p></form></div>
+</div></section>
+</main>
+<footer class="footer"><div class="wrap footerline"><div><a class="brand" href="/">localgift<span class="period">.</span></a><p class="footnote">A Noetfield Systems Inc. venture · Vancouver, BC<br>Participating merchants issue and redeem their own gift cards.</p></div><div class="row"><a href="/for-merchants">Merchant services</a><a href="/privacy">Privacy</a><a href="/terms">Terms</a></div></div></footer>
+<script>
+(function(){
+const economic=document.getElementById('economics'),form=document.getElementById('proposal'),out=document.getElementById('evaluation'),result=document.getElementById('result');
+const cents=n=>Math.round(n*100),bps=n=>Math.round(n*100),money=n=>(n<0?'\u2212':'')+'$'+(Math.abs(n)/100).toFixed(2);
+function scenario(){
+ const f=new FormData(economic),number=k=>Number(f.get(k));
+ return {model:String(f.get('model')),face_cents:cents(number('face')),merchant_rate_bps:bps(number('merchant_rate')),consumer_discount_bps:bps(number('consumer_discount')),cashback_bps:bps(number('cashback')),referral_bps:bps(number('referral')),processing_bps:bps(number('processing')),reserve_bps:bps(number('reserve'))};
+}
+function update(){
+ const d=scenario();
+ for(const k of ['face_cents','merchant_rate_bps','consumer_discount_bps','cashback_bps','referral_bps','processing_bps','reserve_bps'])if(!Number.isFinite(d[k])||d[k]<0)return;
+ const face=d.face_cents,buyerDiscount=Math.round(face*d.consumer_discount_bps/10000),buyer=face-buyerDiscount,issuer=face-Math.round(face*d.merchant_rate_bps/10000),gross=buyer-issuer;
+ const cashback=Math.round(face*d.cashback_bps/10000),referral=Math.round(face*d.referral_bps/10000),processing=Math.round(buyer*d.processing_bps/10000),reserve=Math.round(buyer*d.reserve_bps/10000),margin=gross-cashback-referral-processing-reserve;
+ const cells={buyer:buyer,issuer:issuer,spread:face-issuer,discount:buyerDiscount,cashback,referral,processing,reserve};
+ for(const [key,value] of Object.entries(cells))document.getElementById(key).textContent=(['discount','cashback','referral','processing','reserve'].includes(key)?'\u2212':'')+money(value);
+ document.getElementById('contribution').textContent=(margin>=0?'+':'')+money(margin);
+ result.classList.toggle('loss',margin<=0);
+ out.textContent=margin>0?'Illustrative positive contribution. Confirm issuer terms and settlement before offering rewards.':'Non-positive contribution. Adjust commercial terms before offering customer incentives.';
+ document.getElementById('merchantRateLabel').firstChild.textContent=d.model==='wholesale_resale'?'Wholesale issuer discount · %':'Merchant commission · %';
+}
+economic.addEventListener('input',update);economic.addEventListener('change',update);update();
+form.addEventListener('submit',async event=>{
+ event.preventDefault();const btn=document.getElementById('submit'),status=document.getElementById('formStatus');
+ if(!economic.reportValidity()||!form.reportValidity())return;
+ btn.disabled=true;status.textContent='Recording proposal…';
+ try{
+ const payload={...scenario(),...Object.fromEntries(new FormData(form).entries()),consent:form.elements.consent.checked};
+ const r=await fetch('/api/deals/proposals',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(payload)});
+ const d=await r.json();if(!r.ok)throw Error(d.error||'Proposal could not be saved');
+ status.textContent='Proposal received. Reference '+d.proposal_id.slice(0,8)+'. No payment was taken and no gift card was issued.';
+ form.reset();
+ }catch(e){status.textContent=e.message||'Request unavailable.';}finally{btn.disabled=false;}
+});
+})();
+</script></body></html>
