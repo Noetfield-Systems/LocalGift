@@ -89,7 +89,7 @@ Bun.serve({port:PORT,hostname:"0.0.0.0",async fetch(req){
 
 
 setTimeout(async()=>{
- const paths=["/","/health","/api/partners"];
+ const paths=["/","/health","/api/partners","/api/commercial/catalog","/create","/discover","/for-merchants","/corporate","/quests","/merchant/portal","/assets/commercial.css"];
  const checks=[];
  for(const path of paths){
    try {const r=await fetch("http://127.0.0.1:"+PORT+path,{signal:AbortSignal.timeout(6000)});checks.push({path,status:r.status});}
