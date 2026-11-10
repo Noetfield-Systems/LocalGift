@@ -1,3 +1,4 @@
+import { routeCommercial } from "./features/commercial";
 import { ensureBaselineSchema } from "./db/baseline";
 const PAGE = await Bun.file(new URL("./pages/home.html", import.meta.url)).text();
 const PRIVACY = await Bun.file(new URL("./pages/privacy.html", import.meta.url)).text();
@@ -22,6 +23,7 @@ const PORT=Number(Bun.env.PORT||3000);
 Bun.serve({port:PORT,hostname:"0.0.0.0",async fetch(req){
  const path=new URL(req.url).pathname;
  try{
+ const commercial=await routeCommercial(req,sql);if(commercial)return commercial;
  if(req.method==="GET"&&path==="/")return new Response(PAGE,{headers:{"content-type":"text/html; charset=utf-8","cache-control":"public, max-age=300","x-content-type-options":"nosniff","x-frame-options":"DENY","referrer-policy":"strict-origin-when-cross-origin"}});
  if(req.method==="GET"&&path==="/admin")return new Response(ADMINPAGE,{headers:{"content-type":"text/html; charset=utf-8","cache-control":"no-store","x-robots-tag":"noindex,nofollow"}});
  if(req.method==="GET"&&path==="/privacy")return new Response(PRIVACY,{headers:{"content-type":"text/html; charset=utf-8"}});
