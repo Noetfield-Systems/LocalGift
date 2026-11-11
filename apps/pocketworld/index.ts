@@ -26,6 +26,8 @@ import postgres from "postgres@3.4.7";
       await sql.unsafe("CREATE TABLE IF NOT EXISTS pw_plays (id UUID PRIMARY KEY, user_id UUID NOT NULL REFERENCES pw_users(id), challenge_id UUID UNIQUE NOT NULL, correct BOOLEAN NOT NULL, coins_earned INTEGER NOT NULL, played_at TIMESTAMPTZ NOT NULL DEFAULT NOW())");
       await sql.unsafe("CREATE INDEX IF NOT EXISTS pw_plays_user_idx ON pw_plays(user_id, played_at)");
       await sql.unsafe("CREATE TABLE IF NOT EXISTS pw_gifts (code TEXT PRIMARY KEY, giver_id UUID NOT NULL REFERENCES pw_users(id), item_id TEXT NOT NULL, receiver_id UUID REFERENCES pw_users(id), created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), claimed_at TIMESTAMPTZ)");
+      await sql.unsafe("CREATE TABLE IF NOT EXISTS pw_market_listings (id UUID PRIMARY KEY, seller_id UUID NOT NULL REFERENCES pw_users(id), buyer_id UUID REFERENCES pw_users(id), item_id TEXT NOT NULL, price_coins INTEGER NOT NULL CHECK(price_coins>=10 AND price_coins<=600), state TEXT NOT NULL DEFAULT 'active' CHECK(state IN ('active','sold','cancelled')), created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), sold_at TIMESTAMPTZ)");
+      await sql.unsafe("CREATE INDEX IF NOT EXISTS pw_market_state_idx ON pw_market_listings(state,created_at DESC)");
       await sql.unsafe("CREATE TABLE IF NOT EXISTS pw_cards (id UUID PRIMARY KEY, owner_id UUID NOT NULL REFERENCES pw_users(id), recipient TEXT NOT NULL, message TEXT NOT NULL, theme TEXT NOT NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW())");
       await sql.unsafe("CREATE TABLE IF NOT EXISTS pw_capsules (id UUID PRIMARY KEY, owner_id UUID NOT NULL REFERENCES pw_users(id), title TEXT NOT NULL, message TEXT NOT NULL, unlock_at TIMESTAMPTZ NOT NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW())");
     })().catch(err => { initializePromise = null; throw err; });
@@ -54,12 +56,14 @@ import postgres from "postgres@3.4.7";
   }
   async function snapshot(req) {
     const user = await auth(req);
-    if (!user) return {ok:true,user:null,catalogue,inventory:[],gifts:[],cards:[],capsules:[],stats:await stats()};
+    const market=await sql.unsafe("SELECT m.id,m.item_id,m.price_coins,m.seller_id,u.display_name AS seller_name,m.created_at FROM pw_market_listings m JOIN pw_users u ON u.id=m.seller_id WHERE m.state='active' ORDER BY m.created_at DESC LIMIT 60");
+    if (!user) return {ok:true,user:null,catalogue,market,inventory:[],gifts:[],cards:[],capsules:[],myListings:[],stats:await stats()};
     const inventory = await sql.unsafe("SELECT id,item_id,created_at FROM pw_inventory WHERE user_id=$1 ORDER BY created_at DESC LIMIT 200", [user.id]);
     const gifts = await sql.unsafe("SELECT code,item_id,claimed_at,created_at FROM pw_gifts WHERE giver_id=$1 ORDER BY created_at DESC LIMIT 30", [user.id]);
     const cards = await sql.unsafe("SELECT id,recipient,message,theme,created_at FROM pw_cards WHERE owner_id=$1 ORDER BY created_at DESC LIMIT 30", [user.id]);
     const capsules = await sql.unsafe("SELECT id,title,unlock_at,created_at,CASE WHEN unlock_at<=NOW() THEN message ELSE NULL END AS message FROM pw_capsules WHERE owner_id=$1 ORDER BY created_at DESC LIMIT 30", [user.id]);
-    return {ok:true,user,inventory,gifts,cards,capsules,catalogue,stats:await stats()};
+    const myListings=await sql.unsafe("SELECT id,item_id,price_coins,state,created_at FROM pw_market_listings WHERE seller_id=$1 ORDER BY created_at DESC LIMIT 20",[user.id]);
+    return {ok:true,user,inventory,gifts,cards,capsules,catalogue,market,myListings,stats:await stats()};
   }
   async function stats(){
     const rows = await sql.unsafe("SELECT (SELECT count(*)::integer FROM pw_users WHERE display_name NOT LIKE 'E2E-%') AS members,(SELECT count(*)::integer FROM pw_cards c JOIN pw_users u ON u.id=c.owner_id WHERE u.display_name NOT LIKE 'E2E-%') AS cards,(SELECT count(*)::integer FROM pw_gifts g JOIN pw_users u ON u.id=g.giver_id WHERE g.claimed_at IS NOT NULL AND u.display_name NOT LIKE 'E2E-%') AS gifts");
@@ -137,6 +141,48 @@ import postgres from "postgres@3.4.7";
           const iid=crypto.randomUUID();
           await tx.unsafe("INSERT INTO pw_inventory(id,user_id,item_id) VALUES($1,$2,$3)",[iid,user.id,item.id]);
           return {ok:true,item_id:iid,coins:wallets[0].coins};
+        });
+        return response(result,result.ok?200:409);
+      }
+
+      if(path==="/api/market/list") {
+        const id=String(data.inventoryId||""),price=Number(data.price);
+        if(!/^[0-9a-f-]{36}$/.test(id)||!Number.isInteger(price)||price<10||price>600)return error("Invalid item or price. Use 10–600 Play Coins.");
+        const result=await sql.begin(async tx=>{
+          const owned=await tx.unsafe("DELETE FROM pw_inventory WHERE id=$1 AND user_id=$2 RETURNING item_id",[id,user.id]);
+          if(!owned.length)return {ok:false,error:"Item is not in your collection."};
+          const lid=crypto.randomUUID();
+          await tx.unsafe("INSERT INTO pw_market_listings(id,seller_id,item_id,price_coins) VALUES($1,$2,$3,$4)",[lid,user.id,owned[0].item_id,price]);
+          return {ok:true,id:lid,price,item:owned[0].item_id};
+        });
+        return response(result,result.ok?200:409);
+      }
+      if(path==="/api/market/buy") {
+        const id=String(data.id||"");
+        if(!/^[0-9a-f-]{36}$/.test(id))return error("Invalid listing.");
+        const result=await sql.begin(async tx=>{
+          const found=await tx.unsafe("SELECT id,item_id,price_coins,seller_id FROM pw_market_listings WHERE id=$1 AND state='active' FOR UPDATE",[id]);
+          if(!found.length)return {ok:false,error:"Listing unavailable."};
+          const listing=found[0];
+          if(listing.seller_id===user.id)return {ok:false,error:"Cannot buy your own listing."};
+          const debit=await tx.unsafe("UPDATE pw_users SET coins=coins-$1 WHERE id=$2 AND coins >= $1 RETURNING coins",[listing.price_coins,user.id]);
+          if(!debit.length)return {ok:false,error:"Not enough Play Coins."};
+          const fee=Math.ceil(listing.price_coins*0.05),proceeds=listing.price_coins-fee;
+          await tx.unsafe("UPDATE pw_users SET coins=coins+$1 WHERE id=$2",[proceeds,listing.seller_id]);
+          await tx.unsafe("UPDATE pw_market_listings SET state='sold',buyer_id=$1,sold_at=NOW() WHERE id=$2",[user.id,id]);
+          await tx.unsafe("INSERT INTO pw_inventory(id,user_id,item_id) VALUES($1,$2,$3)",[crypto.randomUUID(),user.id,listing.item_id]);
+          return {ok:true,item:listing.item_id,coins:debit[0].coins,fee,proceeds};
+        });
+        return response(result,result.ok?200:409);
+      }
+      if(path==="/api/market/cancel") {
+        const id=String(data.id||"");
+        if(!/^[0-9a-f-]{36}$/.test(id))return error("Invalid listing.");
+        const result=await sql.begin(async tx=>{
+          const found=await tx.unsafe("UPDATE pw_market_listings SET state='cancelled' WHERE id=$1 AND seller_id=$2 AND state='active' RETURNING item_id",[id,user.id]);
+          if(!found.length)return {ok:false,error:"Only your active listing can be cancelled."};
+          await tx.unsafe("INSERT INTO pw_inventory(id,user_id,item_id) VALUES($1,$2,$3)",[crypto.randomUUID(),user.id,found[0].item_id]);
+          return {ok:true,item:found[0].item_id};
         });
         return response(result,result.ok?200:409);
       }
