@@ -65,13 +65,14 @@ async function inquiry(req:Request,sql:DB){const m=await networkMember(req,sql);
 async function admin(req:Request,sql:DB,path:string){
  if(!operator(req))return json({error:"Unauthorized"},401);
  if(path==="/api/network/admin/queue"&&req.method==="GET"){
-  const [proposals,offers,listings,conversions,interests]=await Promise.all([
+  const [proposals,offers,listings,conversions,interests,clicks]=await Promise.all([
    sql.unsafe("SELECT id,business,contact,email,status,model,face_cents,projected_contribution_cents,agreement_reference FROM localgift_merchant_deal_proposals ORDER BY created_at DESC LIMIT 100"),
    sql.unsafe("SELECT id,business,title,status,created_at FROM localgift_network_offers ORDER BY created_at DESC LIMIT 100"),
    sql.unsafe("SELECT id,title,category,city,asking_cents,seller_email,status,created_at FROM localgift_resale_listings ORDER BY created_at DESC LIMIT 100"),
    sql.unsafe("SELECT c.id,o.business,c.status,c.external_order_ref,c.evidence_ref,c.settlement_ref,c.created_at FROM localgift_network_conversions c JOIN localgift_network_offers o ON o.id=c.offer_id ORDER BY c.created_at DESC LIMIT 100"),
-   sql.unsafe("SELECT i.id,l.title,i.message,i.buyer_email,l.seller_email,i.created_at FROM localgift_resale_inquiries i JOIN localgift_resale_listings l ON i.listing_id=l.id ORDER BY i.created_at DESC LIMIT 100")
-  ]);return json({proposals,offers,resale_listings:listings,conversions,resale_inquiries:interests});
+   sql.unsafe("SELECT i.id,l.title,i.message,i.buyer_email,l.seller_email,i.created_at FROM localgift_resale_inquiries i JOIN localgift_resale_listings l ON i.listing_id=l.id ORDER BY i.created_at DESC LIMIT 100"),
+   sql.unsafe("SELECT c.id,c.offer_id,c.member_id,c.created_at,o.business FROM localgift_offer_clicks c JOIN localgift_network_offers o ON o.id=c.offer_id WHERE c.member_id IS NOT NULL ORDER BY c.created_at DESC LIMIT 100")
+  ]);return json({proposals,offers,resale_listings:listings,conversions,resale_inquiries:interests,tracked_clicks:clicks});
  }
  if(path==="/api/network/admin/summary"&&req.method==="GET"){
  const [members,offerCount,clicks,resaleCount,conversionCounts,rewardTotals]=await Promise.all([
@@ -111,9 +112,19 @@ async function admin(req:Request,sql:DB,path:string){
   return json({reported:!!created.length,duplicate:!created.length,status:"reported",funded:false,reward_issued:false},created.length?201:200);
  }
  if(path==="/api/network/admin/conversion/review"){
-  const id=clean(b.conversion_id,50),status=clean(b.status,20);if(!uuid(id)||!["approved","reversed"].includes(status))return json({error:"Invalid conversion review"},400);
-  const rows=await sql.unsafe("UPDATE localgift_network_conversions SET status=$1 WHERE id=$2 AND status IN ('reported','approved') RETURNING id",[status,id]);
-  return json({reviewed:!!rows.length,status,funded:false,member_rewards_issued:false});
+  const id=clean(b.conversion_id,50),status=clean(b.status,20);
+  if(!uuid(id)||!["approved","reversed"].includes(status))return json({error:"Invalid conversion review"},400);
+  const changed=await sql.begin(async(tx:any)=>{
+   const rows=await tx.unsafe("SELECT status FROM localgift_network_conversions WHERE id=$1 FOR UPDATE",[id]);
+   if(!rows.length)return false;
+   const old=rows[0].status;
+   if(status==="approved"&&old!=="reported")return false;
+   if(status==="reversed"&&!["reported","approved","funded"].includes(old))return false;
+   await tx.unsafe("UPDATE localgift_network_conversions SET status=$1 WHERE id=$2",[status,id]);
+   if(status==="reversed")await tx.unsafe("UPDATE localgift_rewards SET status='reversed' WHERE conversion_id=$1 AND status='recorded_funded'",[id]);
+   return true;
+  });
+  return json({reviewed:changed,status,withdrawals_enabled:false,rewards_reversed:changed&&status==="reversed"},changed?200:409);
  }
  if(path==="/api/network/admin/conversion/fund"){
   const id=clean(b.conversion_id,50),settle=clean(b.settlement_ref,240),ack=b.settlement_confirmed===true;
@@ -135,6 +146,7 @@ async function admin(req:Request,sql:DB,path:string){
 export async function routeNetwork(req:Request,sql:DB|null):Promise<Response|null>{
  const path=new URL(req.url).pathname;
  if(req.method==="GET"&&(path==="/assets/network.css"||path==="/assets/network.js")){const asset=path.endsWith(".css")?"network.css":"network.js";return new Response(await Bun.file(new URL("../pages/"+asset,import.meta.url)).text(),{headers:{"content-type":asset.endsWith(".css")?"text/css; charset=utf-8":"text/javascript; charset=utf-8","cache-control":"public, max-age=300","x-content-type-options":"nosniff"}});}
+ if(req.method==="GET"&&path==="/assets/network-admin.js")return new Response(await Bun.file(new URL("../pages/network-admin.js",import.meta.url)).text(),{headers:{"content-type":"text/javascript; charset=utf-8","cache-control":"no-store","x-content-type-options":"nosniff"}});
  if(req.method==="GET"&&path==="/admin/network"){const html=await Bun.file(new URL("../pages/network-admin.html",import.meta.url)).text();return new Response(html,{headers:{"content-type":"text/html; charset=utf-8","cache-control":"no-store","x-robots-tag":"noindex,nofollow","x-content-type-options":"nosniff"}});}
  if(req.method==="GET"&&["/market","/club","/resale"].includes(path)){
   const page=path.slice(1),html=await Bun.file(new URL("../pages/"+page+".html",import.meta.url)).text();
