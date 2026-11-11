@@ -74,5 +74,21 @@
   console.log("PASS double gift claim refused");
   const recipient=requireSuccess(await api("/api/bootstrap",undefined,second.cookie),"recipient inventory");
   assert.ok(recipient.json.inventory.some(x=>x.item_id==="sunbeam-sticker"));
+  const recovery=requireSuccess(await api("/api/recovery",{},cookie),"one-time recovery code");
+  assert.match(recovery.json.code,/^[a-f0-9]{64}$/);
+  const restored=requireSuccess(await api("/api/recover",{code:recovery.json.code}),"account recovery login");
+  assert.ok(restored.cookie?.startsWith("pw_session="));
+  const restoredProfile=requireSuccess(await api("/api/bootstrap",undefined,restored.cookie),"recovered account persisted");
+  assert.equal(restoredProfile.json.user.display_name,name);
+  assert.equal(restoredProfile.json.user.xp,25);
+  const reuse=await api("/api/recover",{code:recovery.json.code});
+  assert.equal(reuse.status,409);
+  console.log("PASS one-time recovery code cannot be reused");
+  for (const route of ["/privacy","/terms"]) {
+    const legal=await fetch(ROOT+route);
+    assert.equal(legal.status,200,route+" page");
+    assert.match(await legal.text(),/Noetfield Systems Inc/);
+    console.log("PASS "+route+" public page");
+  }
   console.log("E2E SUCCESS — no cash transactions or real customer accounts created");
 })().catch(err=>{console.error(err);process.exit(1);});
