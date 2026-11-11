@@ -93,7 +93,7 @@ Bun.serve({port:PORT,hostname:"0.0.0.0",async fetch(req){
 
 
 setTimeout(async()=>{
- const paths=["/","/health","/api/partners","/api/commercial/catalog","/api/network/offers","/api/network/resale","/market","/club","/resale","/merchant-deals","/create","/discover","/for-merchants","/corporate","/quests","/merchant/portal","/assets/commercial.css"];
+ const paths=["/","/health","/api/partners","/api/commercial/catalog","/api/network/offers","/api/network/resale","/market","/club","/resale","/admin/network","/assets/network.css","/assets/network.js","/assets/network-admin.js","/merchant-deals","/create","/discover","/for-merchants","/corporate","/quests","/merchant/portal","/assets/commercial.css"];
  const checks=[];
  for(const path of paths){
    try {const r=await fetch("http://127.0.0.1:"+PORT+path,{signal:AbortSignal.timeout(6000)});checks.push({path,status:r.status});}
@@ -103,5 +103,11 @@ setTimeout(async()=>{
   const r=await fetch("http://127.0.0.1:"+PORT+"/api/interest",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({email:"bad-email",category:"Coffee & treats",amount:50,consent:true})});
   checks.push({path:"/api/interest invalid-email rejection",status:r.status});
  }catch(e){checks.push({path:"invalid-input",error:String(e?.message||e).slice(0,120)});}
+ if(Bun.env.LOCALGIFT_ADMIN_TOKEN){
+  for(const path of ["/api/ops/summary","/api/network/admin/summary","/api/network/admin/queue"]){
+   try{const r=await fetch("http://127.0.0.1:"+PORT+path,{headers:{authorization:"Bearer "+Bun.env.LOCALGIFT_ADMIN_TOKEN},signal:AbortSignal.timeout(6000)});checks.push({path,status:r.status});}
+   catch(e){checks.push({path,error:String(e?.message||e).slice(0,120)});}
+  }
+ }
  console.log("LOCALGIFT_STARTUP_SELF_CHECK",JSON.stringify(checks));
 },1800).unref?.();
