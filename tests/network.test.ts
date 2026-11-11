@@ -42,7 +42,7 @@ test("guest join sets a secure, HttpOnly cookie and referrals are single-level",
  const db=dbFake();const a=await routeNetwork(await post("/api/network/join",{}),db);
  expect(a?.status).toBe(201);
  const cookie=a?.headers.get("set-cookie")||"";
- expect(cookie).toInclude("HttpOnly");expect(cookie).toInclude("Secure");expect(cookie).toInclude("SameSite=Lax");
+ expect(cookie).toContain("HttpOnly");expect(cookie).toContain("Secure");expect(cookie).toContain("SameSite=Lax");
  const first=await a?.json();expect(first.member.referral_code.length).toBeGreaterThan(8);
  const sess=cookie.split(";")[0];
  const who=await routeNetwork(new Request("https://example.com/api/network/me",{headers:{cookie:sess}}),db);
