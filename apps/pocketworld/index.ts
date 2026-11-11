@@ -20,6 +20,9 @@ import postgres from "postgres@3.4.7";
       await sql.unsafe("CREATE TABLE IF NOT EXISTS pw_users (id UUID PRIMARY KEY, display_name TEXT NOT NULL, session_hash TEXT UNIQUE NOT NULL, coins INTEGER NOT NULL DEFAULT 180 CHECK (coins>=0), xp INTEGER NOT NULL DEFAULT 0 CHECK (xp>=0), created_at TIMESTAMPTZ NOT NULL DEFAULT NOW())");
       await sql.unsafe("CREATE TABLE IF NOT EXISTS pw_inventory (id UUID PRIMARY KEY, user_id UUID NOT NULL REFERENCES pw_users(id), item_id TEXT NOT NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW())");
       await sql.unsafe("ALTER TABLE pw_users ADD COLUMN IF NOT EXISTS recovery_hash TEXT");
+      await sql.unsafe("ALTER TABLE pw_users ADD COLUMN IF NOT EXISTS equipped_companion TEXT");
+      await sql.unsafe("ALTER TABLE pw_users ADD COLUMN IF NOT EXISTS equipped_room TEXT");
+      await sql.unsafe("ALTER TABLE pw_users ADD COLUMN IF NOT EXISTS equipped_world TEXT");
       await sql.unsafe("CREATE UNIQUE INDEX IF NOT EXISTS pw_users_recovery_idx ON pw_users(recovery_hash) WHERE recovery_hash IS NOT NULL");
       await sql.unsafe("CREATE INDEX IF NOT EXISTS pw_inventory_user_idx ON pw_inventory(user_id)");
       await sql.unsafe("CREATE TABLE IF NOT EXISTS pw_challenges (id UUID PRIMARY KEY, user_id UUID NOT NULL REFERENCES pw_users(id), sequence TEXT NOT NULL, expires_at TIMESTAMPTZ NOT NULL, used BOOLEAN NOT NULL DEFAULT FALSE)");
@@ -51,7 +54,7 @@ import postgres from "postgres@3.4.7";
     if (!cookie) return null;
     const token = decodeURIComponent(cookie.slice("pw_session=".length));
     if (token.length > 120 || token.length < 30) return null;
-    const rows = await sql.unsafe("SELECT id,display_name,coins,xp,created_at FROM pw_users WHERE session_hash=$1", [await digest(token)]);
+    const rows = await sql.unsafe("SELECT id,display_name,coins,xp,equipped_companion,equipped_room,equipped_world,created_at FROM pw_users WHERE session_hash=$1", [await digest(token)]);
     return rows[0] || null;
   }
   async function snapshot(req) {
@@ -110,6 +113,17 @@ import postgres from "postgres@3.4.7";
         const code=(crypto.randomUUID()+crypto.randomUUID()).replaceAll("-","");
         await sql.unsafe("UPDATE pw_users SET recovery_hash=$1 WHERE id=$2",[await digest(code),user.id]);
         return response({ok:true,code});
+      }
+      if(path==="/api/equip"){
+        const id=String(data.inventoryId||"");
+        if(!/^[0-9a-f-]{36}$/.test(id))return error("Choose a collectible you own.");
+        const rows=await sql.unsafe("SELECT item_id FROM pw_inventory WHERE id=$1 AND user_id=$2",[id,user.id]);
+        if(!rows.length)return error("Item no longer in your collection.",409);
+        const item=catalogue.find(x=>x.id===rows[0].item_id);
+        if(!item||!["Companion","Room","World"].includes(item.type))return error("Only a companion, room or world can be equipped.");
+        const column=item.type==="Companion"?"equipped_companion":item.type==="Room"?"equipped_room":"equipped_world";
+        await sql.unsafe("UPDATE pw_users SET "+column+"=$1 WHERE id=$2",[item.id,user.id]);
+        return response({ok:true,slot:item.type,item:item.id});
       }
       if(path==="/api/challenge") {
         const id=crypto.randomUUID();
