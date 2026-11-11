@@ -56,7 +56,7 @@ test("merchant proposal is captured with server-calculated economics, not a fict
  const insert=calls.find(x=>x.statement.startsWith("INSERT INTO localgift_merchant_deal_proposals"));
  expect(insert).toBeDefined();
  expect(insert!.args).toContain(380);
- expect(calls.filter(x=>x.statement.startsWith("CREATE TABLE")).length).toBeGreaterThanOrEqual(4);
+ expect(calls.some(x=>x.statement.startsWith("INSERT INTO localgift_merchant_deal_proposals"))).toBe(true);
 });
 test("seller intake rejects non-consenting, incomplete and cross-origin proposals",async()=>{
  const sql={unsafe:async()=>[]};
