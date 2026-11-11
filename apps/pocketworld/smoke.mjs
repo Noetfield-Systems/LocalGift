@@ -100,6 +100,16 @@
   const afterCancel=requireSuccess(await api("/api/bootstrap",undefined,cookie),"cancelled collectible returned");
   assert.ok(afterCancel.json.inventory.some(x=>x.item_id==="sunbeam-sticker"));
   console.log("PASS marketplace cancellation and escrow return");
+  const roomPurchase=requireSuccess(await api("/api/buy",{item:"starlight-room"},second.cookie),"buy usable room");
+  const equipped=requireSuccess(await api("/api/equip",{inventoryId:roomPurchase.json.item_id},second.cookie),"equip owned world room");
+  assert.equal(equipped.json.item,"starlight-room");
+  const savedWorld=requireSuccess(await api("/api/bootstrap",undefined,second.cookie),"persist world customization");
+  assert.equal(savedWorld.json.user.equipped_room,"starlight-room");
+  const ineligible=savedWorld.json.inventory.find(x=>x.item_id==="starry-sticker");
+  assert.ok(ineligible);
+  const invalidEquip=await api("/api/equip",{inventoryId:ineligible.id},second.cookie);
+  assert.equal(invalidEquip.status,400);
+  console.log("PASS equipment ownership and type restrictions");
   const recovery=requireSuccess(await api("/api/recovery",{},cookie),"one-time recovery code");
   assert.match(recovery.json.code,/^[a-f0-9]{64}$/);
   const restored=requireSuccess(await api("/api/recover",{code:recovery.json.code}),"account recovery login");
