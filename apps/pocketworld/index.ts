@@ -163,7 +163,7 @@ import postgres from "postgres@3.4.7";
         const date=new Date(data.date||"");
         if(title.length<2||message.length<3||isNaN(date.getTime())||date.getTime()<Date.now()+60000||date.getTime()>Date.now()+5*365*86400000) return error("Choose a future date and a message.");
         const id=crypto.randomUUID();
-        await sql.unsafe("INSERT INTO pw_capsules(id,owner_id,title,message,unlock_at) VALUES($1,$2,$3,$4)",[id,user.id,title,message,date.toISOString()]);
+        await sql.unsafe("INSERT INTO pw_capsules(id,owner_id,title,message,unlock_at) VALUES($1,$2,$3,$4,$5)",[id,user.id,title,message,date.toISOString()]);
         return response({ok:true,id});
       }
       return error("Unknown endpoint",404);
