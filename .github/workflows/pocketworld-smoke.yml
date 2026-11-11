@@ -1,0 +1,21 @@
+name: PocketWorld deployed E2E
+on:
+  push:
+    branches: [pocketworld-arcade-v1]
+    paths:
+      - 'apps/pocketworld/**'
+      - '.github/workflows/pocketworld-smoke.yml'
+  workflow_dispatch:
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Test deployed PocketWorld and persisted economy
+        run: node apps/pocketworld/smoke.mjs
+        env:
+          POCKETWORLD_URL: https://pocketworld-web-production.up.railway.app
